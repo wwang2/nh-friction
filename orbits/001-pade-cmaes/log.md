@@ -2,7 +2,7 @@
 issue: 2
 parents: []
 eval_version: eval-v1
-metric: 106.44
+metric: 97.902589
 ---
 
 # Rational Pade Friction with CMA-ES Tuning

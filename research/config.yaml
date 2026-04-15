@@ -1,0 +1,45 @@
+metric:
+  name: "weighted_tau_int"
+  direction: minimize
+  target: 150
+  min_relative_improvement: 0.10
+
+baselines:
+  nhc_m3: null  # measured during baseline eval (Phase 2.5)
+
+eval:
+  timeout: 600   # seconds per solution eval (includes setup + 9 integration runs)
+  seeds: 3
+  seed_values: [42, 137, 2024]
+
+compute:
+  backend: modal
+  gpu: null        # CPU-only: velocity Verlet in 1D/2D needs no GPU
+  cpu: 4
+  memory: 8192     # MB
+  timeout: 3600
+
+execution:
+  parallel_agents: 1
+  budget: null
+  max_orbits: 20
+  milestone_interval: 3
+  design_iterations: 1
+  brainstorm_debate_rounds: 2
+
+phases:
+  eval_construction:
+    parallel_agents: 3
+    confidence_threshold: 0.90
+    max_iterations: 5
+    design_iterations: 2
+  problem_refinement:
+    enabled: true
+    parallel_agents: 3
+
+agents:
+  orbit-agent: { model: opus }
+  campaign-reviewer: { model: opus }
+  orbit-reviewer: { model: sonnet }
+  brainstorm-panel: { model: opus }
+  debate-swarm: { model: sonnet }

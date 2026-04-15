@@ -18,7 +18,7 @@ import numpy as np
 # preserving strong cubic mixing. Metric=106.44, beating NHC M=3 (132.1) by 19%.
 _a = 0.5
 _b = 3.0
-_c = 0.05
+_c = 0.06
 _d = 0.0
 
 

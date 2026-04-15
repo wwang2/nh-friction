@@ -2,7 +2,7 @@
 issue: 2
 parents: []
 eval_version: eval-v1
-metric: 120.44
+metric: 106.44
 ---
 
 # Rational Pade Friction with CMA-ES Tuning
@@ -85,3 +85,21 @@ What failed earlier:
 - Bounded Pade (a=0.8, b=4.0, c=0.5, d=0.15): gaussmix tau was excellent (52-62) but doublewell seed 2024 got trapped (kl=0.28, tau=7269)
 - Near-linear (a=1.5, b=1.0, c=0.1, d=0.0): gaussmix tau excellent (73-94) but 1D HO seed 2024 non-ergodic (kl=0.36)
 - CMA-ES on short proxy: unreliable because 50k-step proxy cannot detect long-time non-ergodicity
+
+### Iteration 2: Mild rational damping g(xi) = xi*(0.5 + 3*xi^2)/(1 + 0.05*xi^2)
+
+Adding c=0.05 denominator damping to the cubic polynomial dramatically improves the doublewell_2d performance (tau: 184.5 -> 131.6, -29%) with negligible cost on gaussmix_2d (tau: 96.6 -> 98.9, +2%). The damping prevents the thermostat variable xi from growing unbounded during barrier-crossing events in the doublewell, which allows more efficient transport.
+
+| Potential | Seed 42 | Seed 137 | Seed 2024 | Mean |
+|-----------|---------|----------|-----------|------|
+| harmonic_1d tau | 12.6 | 13.5 | 11.3 | 12.5 |
+| harmonic_1d KL | 0.007 | 0.012 | 0.008 | 0.009 |
+| doublewell_2d tau | 161.7 | 149.6 | 83.5 | 131.6 |
+| doublewell_2d KL | 0.001 | 0.001 | 0.001 | 0.001 |
+| gaussmix_2d tau | 104.2 | 98.3 | 94.2 | 98.9 |
+| gaussmix_2d KL | 0.001 | 0.002 | 0.002 | 0.002 |
+| **weighted metric** | | | | **106.44** |
+
+Wall time: 122s. Beats NHC M=3 baseline (132.1) by 19.4%.
+
+Also tested a=0.3, b=4.0, c=0, d=0 (metric=120.80, worse than a=0.5,b=3 due to gaussmix regression).

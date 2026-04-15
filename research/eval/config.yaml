@@ -1,0 +1,49 @@
+metric:
+  name: "weighted_tau_int"
+  direction: minimize
+  description: "Difficulty-weighted mean integrated autocorrelation time of position q[0], averaged over 3 benchmark potentials x 3 seeds"
+  provenance: "Sokal 1997, Cargese lecture notes, Eq. 3.3; Chodera 2016, JCTC doi:10.1021/acs.jctc.5b00784"
+  known_pitfalls:
+    - "KAM tori: standard NH g(xi)=xi non-ergodic on 1D HO → tau_int capped at 50000"
+    - "BK g(xi)=2xi/(1+xi^2) non-ergodic for some 2D potentials → 2D benchmarks included"
+    - "Logistic g(xi)=tanh(xi) energy drift → KL gate < 0.05 disqualifies"
+
+eval:
+  timeout: 600          # seconds (includes setup + 9 integration runs)
+  seeds: 3
+  seed_values: [42, 137, 2024]
+  n_steps: 1000000      # integration steps per run
+  burn_in: 10000        # steps discarded as burn-in
+  thin: 10              # record every N steps → 100,000 samples
+  dt: 0.01
+  kl_threshold: 0.05    # disqualify if KL > this on any potential
+  tau_cap: 50000        # cap tau_int at N_samples/2
+
+  # Difficulty weights — filled in after baseline run (Phase 2.5)
+  # w_k = tau_NHC(k) / sum_j tau_NHC(j)
+  # Difficulty weights from NHC M=3 baseline (Martyna 1992 correct implementation)
+  # w_k = tau_NHC(k) / sum_j tau_NHC(j); tau values: h1d=5.7, dw2d=70.5, gm2d=163.2
+  difficulty_weights:
+    harmonic_1d: 0.0240
+    doublewell_2d: 0.2944
+    gaussmix_2d: 0.6816
+
+  # Benchmark potentials
+  potentials:
+    harmonic_1d:
+      dim: 1
+      formula: "V(q) = q**2/2"
+    doublewell_2d:
+      dim: 2
+      formula: "V(q,y) = (q**2-1)**2 + y**2/2"
+    gaussmix_2d:
+      dim: 2
+      formula: "V(q) = -log sum_k exp(-|q - mu_k|^2/2), mu_k = 3*(cos(2*pi*k/5), sin(2*pi*k/5))"
+      n_modes: 5
+      mode_radius: 3.0
+
+  # Physical parameters
+  physics:
+    m: 1.0
+    kT: 1.0
+    Q: 1.0    # thermostat mass

@@ -1,11 +1,11 @@
 metric:
   name: "weighted_tau_int"
   direction: minimize
-  target: 150
+  target: 90   # 30% below NHC M=3 baseline of 132.1
   min_relative_improvement: 0.10
 
 baselines:
-  nhc_m3: null  # measured during baseline eval (Phase 2.5)
+  nhc_m3: 132.1  # weighted_tau_int measured with correct NHC M=3 (Martyna 1992)
 
 eval:
   timeout: 600   # seconds per solution eval (includes setup + 9 integration runs)

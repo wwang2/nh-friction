@@ -1,0 +1,17 @@
+{
+  "agents": [
+    {
+      "agent_id": "a6fc9c57f975c75e4",
+      "agent_type": "git-evolve:orbit-agent",
+      "started_at": "2026-04-15T21:38:31.480Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-04-15T22:57:38.775Z",
+      "duration_ms": 4747295
+    }
+  ],
+  "total_spawned": 1,
+  "total_completed": 1,
+  "total_failed": 0,
+  "last_updated": "2026-04-15T23:04:40.415Z"
+}

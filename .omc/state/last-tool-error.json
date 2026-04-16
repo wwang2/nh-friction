@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"uv run python3 research/eval/evaluator.py --solution orbits/003-cmaes-3pot/solution.py --local --seed 1 2>&1\",\"timeout\":600000,\"description\":\"Evaluate candidate a=0.5 b=2.5 c=0.06 d=0.0\"}",
+  "error": "Exit code 1\nINFO: --local flag set; running locally (no Modal).\nVALIDATION: OK (oddness: g(0)=0.00e+00, log-spaced max=0.00e+00, large-ξ max=0.00e+00, max_violation=0.00e+00)\nWARNING: τ_int cross-check mismatch (harmonic_1d/seed=42): FFT-Sokal=11.95, emcee=13.79, rel_diff=15.4% > 10%. Using FFT-Sokal (canonical).\nKS-stationarity OK (harmonic_1d/seed=42): quarter τ_int = ['11.7', '11.4', '11.4', '12.2'], max/min = 1.08\n  harmonic_1d seed=42: tau_int=11.95, kl=0.00601, t=11.0s\nWARNING: τ_int cross...",
+  "timestamp": "2026-04-15T21:59:54.758Z",
+  "retry_count": 1
+}

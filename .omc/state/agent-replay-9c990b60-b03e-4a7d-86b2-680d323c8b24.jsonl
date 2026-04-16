@@ -1,0 +1,4 @@
+{"t":0,"agent":"a6fc9c5","agent_type":"git-evolve:orbit-agent","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"ae27f83","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"a6fc9c5","agent_type":"git-evolve:orbit-agent","event":"agent_stop","success":true,"duration_ms":4747295}
+{"t":0,"agent":"ac0d751","agent_type":"unknown","event":"agent_stop","success":true}

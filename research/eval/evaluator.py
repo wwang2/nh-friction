@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
 Production evaluator for the Nosé-Hoover friction function optimization problem.
-eval-v2  —  extends eval-v1 with configurable thermostat driving function h(q,p).
+eval-v3  —  extends eval-v2 by passing xi to driving_function.
+
+Changes from eval-v2:
+  - driving_function signature extended to driving_function(q, p, grad_V, xi) -> float
+  - xi (current thermostat variable) is passed at each step — enables NHC-like chains
+  - Backward compat: 3-arg driving_function(q, p, grad_V) still accepted (xi ignored)
+  - If absent, falls back to standard kinetic energy driving: h = |p|²/m  (eval-v1/v2 behavior)
+  - All eval-v1 and eval-v2 solutions run unchanged under eval-v3
 
 Changes from eval-v1:
-  - solution.py may optionally define driving_function(q, p, grad_V) -> float
+  - solution.py may optionally define driving_function(q, p, grad_V[, xi]) -> float
   - If absent, falls back to standard kinetic energy driving: h = |p|²/m  (eval-v1 behavior)
-  - dξ/dt = (h(q,p) - d·kT) / Q  where h is provided by the solution
+  - dξ/dt = (h(q,p,grad_V,xi) - d·kT) / Q  where h is provided by the solution
   - Gradient cached in integrator: grad_fn(q) computed once per step, shared by dp/dt and dξ/dt
   - New target: weighted_tau_int < 65  (down from 84.14 achieved in eval-v1)
 
@@ -63,6 +70,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import math
 import sys
 import tempfile
@@ -521,9 +529,9 @@ def _integrate_one(
         grad_q = grad_fn(q)
         p = p - grad_q * half_dt
 
-        # ── thermostat update (eval-v2: configurable driving function) ────────
+        # ── thermostat update (eval-v3: driving_function receives xi) ─────────
         try:
-            h_val = float(driving_fn(q, p, grad_q))
+            h_val = float(driving_fn(q, p, grad_q, xi))
         except Exception as exc:
             print(
                 f"DIVERGED: driving_function raised at step={step}, xi={xi:.4f}: {exc}",
@@ -731,14 +739,26 @@ def _evaluate_solution(solution_code: str) -> dict:
     friction_fn = mod.friction_function
     setup_fn    = getattr(mod, "setup", None)
 
-    # ── eval-v2: load driving_function (backward-compat: default to kinetic) ──
+    # ── eval-v3: load driving_function (backward-compat: default to kinetic) ──
+    # Accepts 3-arg (q,p,grad_V) [eval-v2] or 4-arg (q,p,grad_V,xi) [eval-v3].
+    # All signatures normalized to 4-arg internally.
     _driving_raw = getattr(mod, "driving_function", None)
     if _driving_raw is None:
         # Backward-compatible fallback: standard Nosé-Hoover kinetic driving
-        def driving_fn(q, p, grad_V):
+        def driving_fn(q, p, grad_V, xi):
             return float(np.dot(p, p)) / M   # h = |p|²/m, E[h] = d·kT ✓
     else:
-        driving_fn = _driving_raw
+        # Detect arity: wrap 3-arg (eval-v2) solutions to accept xi
+        try:
+            n_params = len(inspect.signature(_driving_raw).parameters)
+        except (ValueError, TypeError):
+            n_params = 3
+        if n_params >= 4:
+            driving_fn = _driving_raw          # eval-v3 native: receives xi
+        else:
+            _df3 = _driving_raw
+            def driving_fn(q, p, grad_V, xi, _f=_df3):  # noqa: E731
+                return _f(q, p, grad_V)        # eval-v2 compat: xi ignored
         # Preflight zero-mean check (warn only, not disqualify)
         try:
             rng_pre = np.random.default_rng(999)
@@ -747,14 +767,14 @@ def _evaluate_solution(solution_code: str) -> dict:
                 q_s = rng_pre.standard_normal(2)
                 p_s = rng_pre.standard_normal(2)
                 gV_s = np.zeros(2)  # rough check only
-                h_samples.append(float(driving_fn(q_s, p_s, gV_s)))
+                h_samples.append(float(driving_fn(q_s, p_s, gV_s, 0.0)))
             h_mean = float(np.mean(h_samples))
             d_kT_ref = 2.0 * KT
             if abs(h_mean - d_kT_ref) / d_kT_ref > 0.5:
                 print(
                     f"WARNING: driving_function preflight check: E[h]≈{h_mean:.3f}, "
                     f"expected d·kT={d_kT_ref:.3f} (>50% deviation). "
-                    f"Ensure E_canonical[h(q,p)] = d·kT or KL gate may fail.",
+                    f"Ensure E_canonical[h(q,p,xi)] = d·kT or KL gate may fail.",
                     file=sys.stderr, flush=True,
                 )
         except Exception as exc:
@@ -979,8 +999,8 @@ def _print_results(result: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Production Nosé-Hoover friction evaluator (eval-v2). "
-            "Extends eval-v1 with configurable driving_function h(q,p,grad_V) for dxi/dt."
+            "Production Nosé-Hoover friction evaluator (eval-v3). "
+            "Extends eval-v2: driving_function(q,p,grad_V,xi) for dxi/dt; xi passed at each step."
         )
     )
     parser.add_argument("--solution", required=True, help="Path to solution.py")

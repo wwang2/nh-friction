@@ -1,7 +1,7 @@
 metric:
   name: "weighted_tau_int"
   direction: minimize
-  target: 90   # 30% below NHC M=3 baseline of 132.1
+  target: 65   # eval-v2 target: 23% below eval-v1 best (84.14), 51% below NHC M=3 baseline
   min_relative_improvement: 0.10
 
 baselines:

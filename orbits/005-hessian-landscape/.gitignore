@@ -1,0 +1,4 @@
+tmp_sol_*.py
+hessian_results.json
+hillclimb_results.json
+__pycache__/

@@ -2,7 +2,7 @@
 issue: 7
 parents: [003-cmaes-3pot]
 eval_version: eval-v1
-metric: null
+metric: 84.142123
 ---
 
 # Non-monotonic Effective Coupling for Barrier Crossing

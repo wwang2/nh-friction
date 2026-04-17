@@ -1,24 +1,23 @@
 metric:
-  name: "weighted_tau_int"
+  name: weighted_tau_int
   direction: minimize
-  target: 65   # eval-v2 target: 23% below eval-v1 best (84.14), 51% below NHC M=3 baseline
-  min_relative_improvement: 0.10
-
+  target: 65
+  min_relative_improvement: 0.1
 baselines:
-  nhc_m3: 132.1  # weighted_tau_int measured with correct NHC M=3 (Martyna 1992)
-
+  nhc_m3: 132.1
 eval:
-  timeout: 600   # seconds per solution eval (includes setup + 9 integration runs)
+  timeout: 600
   seeds: 3
-  seed_values: [42, 137, 2024]
-
+  seed_values:
+  - 42
+  - 137
+  - 2024
 compute:
   backend: modal
-  gpu: null        # CPU-only: velocity Verlet in 1D/2D needs no GPU
+  gpu: null
   cpu: 4
-  memory: 8192     # MB
+  memory: 8192
   timeout: 3600
-
 execution:
   parallel_agents: 1
   budget: null
@@ -26,20 +25,25 @@ execution:
   milestone_interval: 3
   design_iterations: 1
   brainstorm_debate_rounds: 2
-
 phases:
   eval_construction:
     parallel_agents: 3
-    confidence_threshold: 0.90
+    confidence_threshold: 0.9
     max_iterations: 5
     design_iterations: 2
   problem_refinement:
     enabled: true
     parallel_agents: 3
-
 agents:
-  orbit-agent: { model: opus }
-  campaign-reviewer: { model: opus }
-  orbit-reviewer: { model: sonnet }
-  brainstorm-panel: { model: opus }
-  debate-swarm: { model: sonnet }
+  orbit-agent:
+    model: opus
+  campaign-reviewer:
+    model: opus
+  orbit-reviewer:
+    model: sonnet
+  brainstorm-panel:
+    model: opus
+  debate-swarm:
+    model: sonnet
+plugin_version: 8bee897
+plugin_source: local:/Users/wujiewang/code/git-evolve

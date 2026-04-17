@@ -2,52 +2,107 @@
 issue: 13
 parents: [010-potential-adaptive]
 eval_version: eval-v2
-metric: null
+metric: 49.54
 ---
 
 # Joint CMA-ES Optimization of Pade Friction Shape and Effective-Q Scaling
 
+## Result
+
+**METRIC = 49.54** (from orbit-010 baseline of 60.34, a 17.9% relative improvement).
+
+| Potential | Weight | Orbit-010 tau | Orbit-012 tau | Change |
+|-----------|--------|--------------|--------------|--------|
+| harmonic  | 2.4%   | 7.29         | 7.29         | 0%     |
+| doublewell| 29.4%  | 33.48        | 30.48        | -9%    |
+| gaussmix  | 68.2%  | 73.81        | 59.25        | -20%   |
+| **Weighted** | 100% | **60.34**   | **49.54**    | **-18%** |
+
 ## Motivation
 
-Orbit-010 achieved metric=60.34 using potential-adaptive effective-Q driving with fixed Pade friction parameters (a=0.7, b=3.0, c=0.06). The per-potential alpha values were: harmonic alpha=2.0 (tau=7.29), doublewell alpha=3.0 (tau=33.48), gaussmix alpha=1.0 (tau=73.81).
-
-Two observations motivate this orbit:
-
-1. **The Pade parameters were optimized at alpha=1 (standard Nose-Hoover).** When alpha != 1, the effective thermostat mass becomes Q_eff = Q/alpha, changing the characteristic timescale of xi oscillations. The optimal friction shape g(xi) should depend on the alpha value -- higher alpha means xi explores a wider range faster, so the nonlinear saturation controlled by (b, c) may need adjustment.
-
-2. **Gaussmix uses alpha=1.0 and dominates the metric (68.2% weight).** The inter-mode barrier crossing in the 5-mode Gaussian mixture is the bottleneck. There may exist an (a, b, c, alpha) tuple for gaussmix that reduces tau below 73.81 while keeping KL < 0.05.
+Orbit-010 achieved metric=60.34 using potential-adaptive effective-Q driving with fixed Pade friction parameters (a=0.7, b=3.0, c=0.06). The same Pade shape was used for all three potentials. This orbit tests whether per-potential Pade parameter tuning can improve the metric, particularly for the gaussmix potential which dominates with 68.2% weight.
 
 ## Approach
 
-Joint 4-parameter CMA-ES optimization over (a, b, c, alpha) per potential:
-- a in (0.01, 3], b in (0.01, 10], c in (0.001, 1], alpha in [1.0, 5.0]
-- Pade friction: g(xi) = xi * (a + b*xi^2) / (1 + c*xi^2)
-- Driving: h = alpha * |p|^2 - (alpha-1) * d*kT
-- Inner loop: 200k steps, 1-2 seeds (fast proxy for production 1M steps)
+1. Grid search over alpha values with fixed Pade (a=0.7, b=3.0, c=0.06) for each potential
+2. Per-potential Pade parameter scans (a, b, c independently) using 500k-step mini-evaluator
+3. Production evaluator validation of promising candidates
+4. Direct production sweep of 9 parameter combinations for final tuning
 
-Strategy:
-1. Grid search alpha with fixed (a,b,c) = (0.7, 3.0, 0.06) to find promising alpha ranges
-2. CMA-ES joint optimization starting from best grid point
-3. Assemble per-potential best parameters into full solution.py
-4. Validate with production evaluator (1M steps, 3 seeds)
+## Key Finding: Lower b for Gaussmix
 
-## Theoretical Background
+The most impactful discovery is that the Pade cubic coefficient b should be much lower for the gaussmix potential. The standard Pade g(xi) = xi*(0.7 + 3.0*xi^2)/(1 + 0.06*xi^2) has strong cubic growth, which causes the friction to increase rapidly for large |xi|. For the 5-mode Gaussian mixture, this appears to over-damp the thermostat variable at large xi values, slowing inter-mode transitions.
 
-The effective-Q driving h = alpha*K - (alpha-1)*d*kT preserves the canonical (q,p) marginal because:
-- E_canonical[h] = alpha*d*kT - (alpha-1)*d*kT = d*kT (zero-mean condition satisfied)
-- dxi/dt = (h - d*kT)/Q = alpha*(K - d*kT)/Q, equivalent to Q_eff = Q/alpha
-- The xi-marginal changes shape but the physical (q,p) distribution remains exp(-H/kT)
+With b=1.0 instead of b=3.0, the friction profile becomes more linear. At xi=2, for instance:
+- b=3.0: g(2) = 2*(0.7 + 12)/(1 + 0.24) = 20.48
+- b=1.0: g(2) = 2*(0.7 + 4)/(1 + 0.24) = 7.58
 
-The friction function g(xi) controls how xi oscillations translate into momentum damping. For larger alpha (more aggressive thermostatting), xi may reach larger values more frequently, making the nonlinear behavior of g at large xi more important.
+The reduced friction at large xi allows the thermostat to drive larger momentum changes when xi is away from zero, which helps the chain cross barriers between the 5 Gaussian modes.
+
+## Production Evaluation Results
+
+| Seed | tau_h | tau_dw | tau_gm | KL_h    | KL_dw   | KL_gm   |
+|------|-------|--------|--------|---------|---------|---------|
+| 42   | 6.72  | 29.16  | 68.85  | 0.03740 | 0.00071 | 0.00365 |
+| 137  | 7.01  | 28.66  | 57.91  | 0.01955 | 0.00044 | 0.00307 |
+| 2024 | 8.13  | 33.62  | 51.00  | 0.03358 | 0.00069 | 0.00195 |
+| **Mean** | **7.29** | **30.48** | **59.25** | **0.030** | **0.001** | **0.003** |
+
+All KL values well below the 0.05 threshold.
+
+## Optimized Parameters
+
+```
+harmonic:   a=0.70, b=3.00, c=0.06, alpha=2.0  (unchanged from orbit-010)
+doublewell: a=1.00, b=4.00, c=0.06, alpha=3.0  (higher a,b vs orbit-010)
+gaussmix:   a=0.70, b=1.00, c=0.06, alpha=1.0  (lower b vs orbit-010)
+```
+
+## What Worked
+
+1. **Gaussmix b=1.0**: Reducing the Pade cubic coefficient from 3.0 to 1.0 improved gaussmix tau from 73.81 to 59.25 (20% improvement). This is the dominant effect.
+2. **Doublewell a=1.0, b=4.0**: Slightly tuning the doublewell Pade improved tau from 33.48 to 30.48 (9% improvement). This contributes modestly given the 29.4% weight.
+
+## What Did Not Work
+
+1. **Gaussmix alpha > 1.0**: All tested values (1.1, 1.2, 1.5, 2.0, 3.0, 5.0) gave worse tau for gaussmix. The standard thermostat mass (alpha=1.0) is optimal for inter-mode mixing.
+2. **Doublewell alpha=4.0**: The 200k-step mini-evaluator suggested alpha=4.0 was best for doublewell (tau=35.27), but the production evaluator (1M steps) showed it gives tau=56.49 -- much worse than alpha=3.0. The mini-evaluator was unreliable for this potential due to insufficient trajectory length.
+3. **Gaussmix b=0.5**: Too little cubic growth caused tau to increase to 127.0 -- the friction becomes too weak at large xi.
+4. **Gaussmix b=1.3, c=0.03**: Mini-eval suggested this was better (tau=52.53), but production eval gave tau=70.65. Again, mini-eval noise was misleading.
+5. **CMA-ES joint optimization**: The 200k-step CMA-ES inner loop was too noisy to converge reliably for 2D potentials. Manual grid search followed by production validation was more effective.
+
+## Lessons Learned
+
+1. **Mini-evaluators are unreliable for multimodal potentials.** The 200k-step proxy gave misleading rankings for both doublewell and gaussmix. Production validation is essential before claiming any improvement.
+2. **Per-potential friction tuning matters.** The optimal friction shape depends on the potential landscape. A single set of Pade parameters is suboptimal.
+3. **The b parameter controls the high-xi behavior.** For potentials with well-separated modes (gaussmix), more linear friction (lower b) helps. For potentials with barriers (doublewell), slightly stronger nonlinear friction (higher b) helps.
+
+## Prior Art and Novelty
+
+### What is already known
+- Bulgac and Kusnezov (1990) proposed the Pade-type friction g(xi) = xi*(a + b*xi^2)/(1 + c*xi^2)
+- Orbit-003 optimized (a, b, c) via CMA-ES for all potentials jointly, finding a=0.7, b=3.0, c=0.06
+- Orbit-010 introduced potential-adaptive effective-Q driving with per-potential alpha
+
+### What this orbit adds
+- Per-potential Pade friction tuning: the optimal (a, b, c) depends on the potential type
+- Specifically, the gaussmix potential benefits from much lower b (1.0 vs 3.0)
+- This is a parameter optimization result, not a new theoretical insight
+
+### Honest positioning
+This orbit applies existing techniques (Pade friction, effective-Q driving) with per-potential parameter tuning. The improvement is empirical -- we found that the globally-optimal Pade parameters from orbit-003 are suboptimal when specialized per potential. The 18% metric improvement is driven primarily by a single parameter change (b: 3.0 to 1.0 for gaussmix).
 
 ## Glossary
 
-- **Pade friction**: g(xi) = xi*(a + b*xi^2)/(1 + c*xi^2), a rational function form that is odd by construction
-- **Effective-Q**: Q_eff = Q/alpha, the effective thermostat mass when using alpha-scaled driving
+- **Pade friction**: g(xi) = xi*(a + b*xi^2)/(1 + c*xi^2), a rational function ensuring odd symmetry
+- **Effective-Q**: Using h = alpha*|p|^2 - (alpha-1)*d*kT as driving, equivalent to Q_eff = Q/alpha
 - **CMA-ES**: Covariance Matrix Adaptation Evolution Strategy, a derivative-free optimizer
-- **KL gate**: KL(empirical || analytical) < 0.05, the canonical measure preservation check
-- **tau_int**: Integrated autocorrelation time, lower is better
+- **KL gate**: KL divergence between empirical and analytical marginals must be < 0.05
+- **tau_int**: Integrated autocorrelation time of q[0], lower is better
+- **Mini-eval**: Shorter integration (200k-500k steps) for fast parameter screening
 
-## Results
+## References
 
-(Pending optimization run...)
+- Bulgac, A. and Kusnezov, D. (1990). Phys. Rev. A 42, 5045 -- Pade-type friction form
+- Orbit-003: CMA-ES optimization of Pade parameters (a=0.7, b=3.0, c=0.06)
+- Orbit-010: Potential-adaptive effective-Q driving (metric=60.34)

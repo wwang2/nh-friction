@@ -2,7 +2,7 @@
 issue: 13
 parents: [010-potential-adaptive]
 eval_version: eval-v2
-metric: 49.54
+metric: 49.537154
 ---
 
 # Joint CMA-ES Optimization of Pade Friction Shape and Effective-Q Scaling

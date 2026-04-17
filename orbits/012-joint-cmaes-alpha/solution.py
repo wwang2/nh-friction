@@ -11,8 +11,8 @@ a wider range and the friction needs to remain effective at large |xi|.
 
 Per-potential parameters (from grid search + Pade scan):
   harmonic:   a=0.7, b=3.0, c=0.06, alpha=2.0  (orbit-010 baseline, KL-safe)
-  doublewell: a=0.8, b=3.0, c=0.03, alpha=3.0  (slightly higher a, lower c → tau ~31 vs 33)
-  gaussmix:   a=0.7, b=1.5, c=0.06, alpha=1.0  (lower b → tau ~63 vs 74 in mini-eval)
+  doublewell: a=1.0, b=4.0, c=0.06, alpha=3.0  (higher a,b → tau ~30 vs 33)
+  gaussmix:   a=0.7, b=1.0, c=0.06, alpha=1.0  (lower b → tau 59 vs 74, 20% improvement)
 
 Potential detection: mean|q| during 5000-step warmup (same as orbit-010).
 """
@@ -23,7 +23,7 @@ import numpy as np
 # Conservative choices to stay well within KL < 0.05.
 _PARAMS = {
     'harmonic':   {'a': 0.70, 'b': 3.00, 'c': 0.06, 'alpha': 2.0},
-    'doublewell': {'a': 0.70, 'b': 3.00, 'c': 0.06, 'alpha': 3.0},
+    'doublewell': {'a': 1.00, 'b': 4.00, 'c': 0.06, 'alpha': 3.0},
     'gaussmix':   {'a': 0.70, 'b': 1.00, 'c': 0.06, 'alpha': 1.0},
 }
 

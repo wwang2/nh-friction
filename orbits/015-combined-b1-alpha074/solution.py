@@ -1,29 +1,31 @@
 """
-Combined b=1.0 + alpha=0.74 for gaussmix.
+Potential-adaptive Nose-Hoover thermostat with per-potential friction and driving.
 orbit/015-combined-b1-alpha074
 
-Combines two independently discovered improvements:
-  - orbit-012: b=1.0 (vs 3.0) for gaussmix Pade friction → tau_gm 73.81→59.25
-  - orbit-014: alpha=0.74 (vs 1.0) for gaussmix → tau_gm 73.81→57.66
+Finding: The combination hypothesis (b=1.0 from orbit-012 + alpha=0.74 from
+orbit-014) is REJECTED. These parameters interact destructively for gaussmix:
+b=1.0 weakens friction at large xi while alpha=0.74 weakens driving, and
+together they make the thermostat too sluggish to drive inter-mode transitions
+(tau_gm=169.5 vs 57.7 for b=3.0+alpha=0.74 or 59.2 for b=1.0+alpha=1.0).
 
-Both are valid within the Liouville constraint h = alpha*|p|^2 - (alpha-1)*d*kT.
-Changes to g(xi) shape (via a,b,c) preserve canonical invariance for any alpha.
+Best config: orbit-014's params (b=3.0 for all potentials, alpha=0.74 for
+gaussmix only). Exhaustive sweep of (a, b, c, alpha) around this point
+confirms it as a local optimum.
 
-Starting point:
-  harmonic:   a=0.70, b=3.0, c=0.06, alpha=2.0  (orbit-012)
-  doublewell: a=1.00, b=4.0, c=0.06, alpha=3.0  (orbit-012)
-  gaussmix:   a=0.70, b=1.0, c=0.06, alpha=0.74 (combined)
-
-Agent should sweep (b, alpha) for gaussmix around this starting point.
+Per-potential parameters:
+  harmonic:   a=0.70, b=3.0, c=0.06, alpha=2.0  (stronger thermostat)
+  doublewell: a=1.00, b=4.0, c=0.06, alpha=3.0  (aggressive barrier crossing)
+  gaussmix:   a=0.70, b=3.0, c=0.06, alpha=0.74 (weaker thermostat preserves
+              momentum through inter-mode barriers)
 """
 
 import numpy as np
 
-# ── Per-potential parameters: (a, b, c, alpha) ──────────────────────────────
+# ── Per-potential parameters ─────────────────────────────────────────────────
 _PARAMS = {
     'harmonic':   {'a': 0.70, 'b': 3.00, 'c': 0.06, 'alpha': 2.00},
     'doublewell': {'a': 1.00, 'b': 4.00, 'c': 0.06, 'alpha': 3.00},
-    'gaussmix':   {'a': 0.70, 'b': 1.00, 'c': 0.06, 'alpha': 0.74},
+    'gaussmix':   {'a': 0.70, 'b': 3.00, 'c': 0.06, 'alpha': 0.74},
 }
 
 # ── Active parameters (set during detection) ─────────────────────────────────
@@ -53,7 +55,12 @@ def friction_derivative(xi: np.ndarray) -> np.ndarray:
 
 
 def driving_function(q: np.ndarray, p: np.ndarray, grad_V: np.ndarray) -> float:
-    """Potential-adaptive driving: h = alpha*|p|^2 - (alpha-1)*d*kT."""
+    """Effective-Q driving: h = alpha*|p|^2 - (alpha-1)*d*kT.
+
+    For alpha > 1: stronger thermostatting (smaller effective Q).
+    For alpha < 1: weaker thermostatting (larger effective Q).
+    E[h] = d*kT for all alpha (canonical invariance preserved).
+    """
     global _a, _b, _c, _alpha, _potential_type, _probe_n, _probe_q_norm_sum
 
     d = len(q)

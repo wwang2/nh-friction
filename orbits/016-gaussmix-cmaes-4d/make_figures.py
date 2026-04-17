@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Generate narrative.png and results.png for orbit/016-gaussmix-cmaes-4d.
-Reads search_results.npz (from cmaes_search.py) + production eval output.
 
 Usage:
   uv run python3 orbits/016-gaussmix-cmaes-4d/make_figures.py
@@ -44,10 +43,10 @@ plt.rcParams.update({
 
 COLORS = {
     'baseline': '#888888',
-    'orbit014': '#4C72B0',
-    'cmaes_best': '#DD8452',
-    'grid_valid': '#55A868',
-    'grid_invalid': '#C44E52',
+    'cand0': '#4C72B0',
+    'cand1': '#DD8452',
+    'cand2': '#55A868',
+    'seeds': ['#4C72B0', '#DD8452', '#55A868'],
 }
 
 BASE_DIR = Path(__file__).parent
@@ -55,153 +54,148 @@ FIG_DIR = BASE_DIR / 'figures'
 FIG_DIR.mkdir(exist_ok=True)
 
 
-def make_narrative(data):
+def make_narrative():
     """
-    Panel (a): (b, alpha) heatmap of tau_gm from grid search
-    Panel (b): Friction function g(xi) comparison — baseline vs CMA-ES best
-    Panel (c): Driving function effective alpha visualization
+    Panel (a): Friction function g(xi) comparison for different (a, b) values
+    Panel (b): Driving function h(p) for different alpha
+    Panel (c): Verification: 200k vs 1M tau estimates showing noise problem
     """
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 
-    # ── Panel (a): (b, alpha) heatmap ─────────────────────────────────────────
-    ax = axes[0]
-    grid_params = data['grid_params']  # shape (N, 4): a, b, c, alpha
-    grid_taus = data['grid_taus']
-
-    # Filter to a=0.7, c=0.06 (Phase 1 grid)
-    mask = (np.abs(grid_params[:, 0] - 0.7) < 0.01) & (np.abs(grid_params[:, 2] - 0.06) < 0.01)
-    b_vals = np.sort(np.unique(grid_params[mask, 1]))
-    alpha_vals = np.sort(np.unique(grid_params[mask, 3]))
-
-    tau_grid = np.full((len(b_vals), len(alpha_vals)), np.nan)
-    for i, b in enumerate(b_vals):
-        for j, al in enumerate(alpha_vals):
-            idx = mask & (np.abs(grid_params[:, 1] - b) < 0.01) & (np.abs(grid_params[:, 3] - al) < 0.01)
-            if np.any(idx):
-                tau_val = grid_taus[idx][0]
-                if tau_val < TAU_CAP:
-                    tau_grid[i, j] = tau_val
-
-    TAU_CAP = 50_000
-    im = ax.imshow(tau_grid.T, origin='lower', aspect='auto',
-                   extent=[b_vals[0]-0.25, b_vals[-1]+0.25,
-                           alpha_vals[0]-0.05, alpha_vals[-1]+0.05],
-                   cmap='viridis_r', vmin=40, vmax=200)
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='tau_gm (200k)')
-    ax.set_xlabel('b')
-    ax.set_ylabel('alpha')
-    ax.set_title('(a) Gaussmix tau_int landscape')
-
-    # Mark known optima
-    best_p = data['best_params']
-    ax.plot(3.0, 0.74, 'D', color=COLORS['orbit014'], markersize=8, label='orbit-014')
-    if best_p is not None and np.any(best_p != 0):
-        ax.plot(best_p[1], best_p[3], '*', color=COLORS['cmaes_best'], markersize=12, label='CMA-ES best')
-    ax.legend(loc='upper right')
-    ax.text(-0.12, 1.05, '(a)', transform=ax.transAxes, fontsize=14, fontweight='bold')
-
-    # ── Panel (b): Friction function comparison ──────────────────────────────
-    ax = axes[1]
-    xi = np.linspace(-3, 3, 200)
+    xi = np.linspace(-3, 3, 300)
 
     def g(xi, a, b, c):
         xi2 = xi ** 2
         return xi * (a + b * xi2) / (1 + c * xi2)
 
-    # Baseline (orbit-014)
-    ax.plot(xi, g(xi, 0.7, 3.0, 0.06), color=COLORS['orbit014'], lw=2, label='orbit-014 (a=0.7,b=3.0,c=0.06)')
-    # CMA-ES best
-    if best_p is not None and np.any(best_p != 0):
-        ax.plot(xi, g(xi, best_p[0], best_p[1], best_p[2]),
-                color=COLORS['cmaes_best'], lw=2, ls='--',
-                label=f'CMA-ES (a={best_p[0]:.2f},b={best_p[1]:.2f},c={best_p[2]:.3f})')
+    # ── Panel (a): Friction function comparison ──────────────────────────────
+    ax = axes[0]
     # Standard NH
     ax.plot(xi, xi, color=COLORS['baseline'], lw=1, ls=':', label='g(xi)=xi (standard NH)')
+    # Baseline (orbit-014)
+    ax.plot(xi, g(xi, 0.7, 3.0, 0.06), color=COLORS['cand2'], lw=2,
+            label='baseline (a=0.7, b=3.0)')
+    # Basin A best
+    ax.plot(xi, g(xi, 0.8, 3.5, 0.06), color=COLORS['cand0'], lw=2, ls='--',
+            label='Basin A (a=0.8, b=3.5)')
+    # Basin B best
+    ax.plot(xi, g(xi, 0.6, 1.0, 0.06), color=COLORS['cand1'], lw=2, ls='-.',
+            label='Basin B (a=0.6, b=1.0)')
 
     ax.set_xlabel('xi')
     ax.set_ylabel('g(xi)')
-    ax.set_title('(b) Friction function comparison')
+    ax.set_title('(a) Friction functions explored')
+    ax.legend(loc='upper left', fontsize=9)
+    ax.text(-0.12, 1.05, '(a)', transform=ax.transAxes, fontsize=14, fontweight='bold')
+
+    # ── Panel (b): Driving function ──────────────────────────────────────────
+    ax = axes[1]
+    pp = np.linspace(0, 8, 200)
+    d_kT = 2.0
+
+    ax.plot(pp, pp, color=COLORS['baseline'], lw=1, ls=':', label='alpha=1.0 (standard)')
+    ax.plot(pp, 0.74 * pp - (0.74 - 1.0) * d_kT, color=COLORS['cand2'], lw=2,
+            label='alpha=0.74 (gaussmix)')
+    ax.plot(pp, 2.0 * pp - (2.0 - 1.0) * d_kT, color=COLORS['cand0'], lw=1.5, ls='--',
+            label='alpha=2.0 (harmonic)')
+    ax.plot(pp, 3.0 * pp - (3.0 - 1.0) * d_kT, color=COLORS['cand1'], lw=1.5, ls='-.',
+            label='alpha=3.0 (doublewell)')
+
+    ax.axhline(d_kT, color='gray', lw=0.5, alpha=0.3)
+    ax.annotate('E[h] = d*kT', xy=(6.5, d_kT + 0.15), fontsize=9, color='gray')
+    ax.set_xlabel('|p|^2')
+    ax.set_ylabel('h(p)')
+    ax.set_title('(b) Per-potential driving functions')
     ax.legend(loc='upper left', fontsize=9)
     ax.text(-0.12, 1.05, '(b)', transform=ax.transAxes, fontsize=14, fontweight='bold')
 
-    # ── Panel (c): Driving function behavior ─────────────────────────────────
+    # ── Panel (c): 200k vs 1M noise comparison ──────────────────────────────
     ax = axes[2]
-    pp = np.linspace(0, 8, 200)  # |p|^2 range
-    d_kT = 2.0  # dim=2, kT=1
 
-    # Standard: h = pp (alpha=1)
-    ax.plot(pp, pp, color=COLORS['baseline'], lw=1, ls=':', label='alpha=1.0 (standard)')
-    # Orbit-014: alpha=0.74
-    ax.plot(pp, 0.74 * pp - (0.74 - 1.0) * d_kT, color=COLORS['orbit014'], lw=2, label='alpha=0.74 (orbit-014)')
-    # CMA-ES best
-    if best_p is not None and np.any(best_p != 0):
-        al = best_p[3]
-        ax.plot(pp, al * pp - (al - 1.0) * d_kT,
-                color=COLORS['cmaes_best'], lw=2, ls='--',
-                label=f'alpha={al:.3f} (CMA-ES)')
-    ax.axhline(d_kT, color='gray', lw=0.5, ls='-', alpha=0.3)
-    ax.annotate('E[h] = d*kT', xy=(6.5, d_kT + 0.1), fontsize=9, color='gray')
+    candidates = ['Basin A\n(0.8,3.5,0.06,0.74)', 'Basin B\n(0.6,1.0,0.06,1.0)', 'Baseline\n(0.7,3.0,0.06,0.74)']
+    tau_200k = [32.6, 34.2, 62.6]
+    tau_1M_mean = [66.18, 69.13, 57.66]
+    tau_1M_std = [10.93, 7.76, 7.11]
 
-    ax.set_xlabel('|p|^2')
-    ax.set_ylabel('h(p)')
-    ax.set_title('(c) Driving function h(p)')
+    x = np.arange(len(candidates))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, tau_200k, width, color='#8172B3', alpha=0.7, label='200k steps (1 seed)')
+    bars2 = ax.bar(x + width/2, tau_1M_mean, width, color='#937860', alpha=0.7, label='1M steps (3-seed mean)')
+    ax.errorbar(x + width/2, tau_1M_mean, yerr=tau_1M_std, fmt='none', ecolor='black', capsize=4, capthick=1.5)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(candidates, fontsize=9)
+    ax.set_ylabel('tau_gm (gaussmix only)')
+    ax.set_title('(c) Short-run estimates are misleading')
     ax.legend(loc='upper left', fontsize=9)
     ax.text(-0.12, 1.05, '(c)', transform=ax.transAxes, fontsize=14, fontweight='bold')
+
+    # Annotate the reversal
+    ax.annotate('200k: "48% better"', xy=(0 - width/2, tau_200k[0] + 1),
+                fontsize=8, color='#8172B3', ha='center')
+    ax.annotate('1M: 15% worse', xy=(0 + width/2, tau_1M_mean[0] + tau_1M_std[0] + 1),
+                fontsize=8, color='#937860', ha='center')
 
     fig.savefig(FIG_DIR / 'narrative.png', dpi=200, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f"Saved {FIG_DIR / 'narrative.png'}")
 
 
-def make_results(data, prod_metric=None, prod_taus=None):
+def make_results():
     """
-    Panel (a): Grid search valid tau distribution
-    Panel (b): Seed-by-seed breakdown (production eval)
+    Panel (a): Production eval seed-by-seed breakdown
+    Panel (b): Comparison of all candidates at 1M steps
     """
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
-    # ── Panel (a): Distribution of valid tau values from grid ─────────────────
+    # ── Panel (a): Production eval per-potential ─────────────────────────────
     ax = axes[0]
-    grid_taus = data['grid_taus']
-    TAU_CAP = 50_000
-    valid_taus = grid_taus[grid_taus < TAU_CAP]
+    potentials = ['harmonic\n(w=0.024)', 'doublewell\n(w=0.294)', 'gaussmix\n(w=0.682)']
+    taus = {
+        'harmonic': [6.72, 7.01, 8.13],
+        'doublewell': [29.16, 28.66, 33.62],
+        'gaussmix': [64.53, 60.59, 47.86],
+    }
+    seeds = [42, 137, 2024]
+    x = np.arange(len(potentials))
+    width = 0.25
 
-    if len(valid_taus) > 0:
-        ax.hist(valid_taus, bins='fd', color=COLORS['grid_valid'], alpha=0.7, edgecolor='white')
-        ax.axvline(data['best_mean_tau'][0], color=COLORS['cmaes_best'], lw=2, ls='--',
-                   label=f"CMA-ES best: {data['best_mean_tau'][0]:.1f}")
-        # Mark baseline
-        ax.axvline(57.66, color=COLORS['orbit014'], lw=2, ls='-.',
-                   label='orbit-014 baseline: 57.66')
-    ax.set_xlabel('tau_gm (gaussmix only, 200k steps)')
-    ax.set_ylabel('Count')
-    ax.set_title('(a) Grid search tau distribution')
+    for i, seed in enumerate(seeds):
+        vals = [taus['harmonic'][i], taus['doublewell'][i], taus['gaussmix'][i]]
+        ax.bar(x + i * width - width, vals, width,
+               label=f'Seed {seed}', color=COLORS['seeds'][i], alpha=0.8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(potentials, fontsize=10)
+    ax.set_ylabel('tau_int')
+    ax.set_title('(a) Production eval: METRIC = 48.45')
     ax.legend(fontsize=9)
     ax.text(-0.12, 1.05, '(a)', transform=ax.transAxes, fontsize=14, fontweight='bold')
 
-    # ── Panel (b): Production eval seed breakdown ─────────────────────────────
+    # ── Panel (b): Candidate comparison at 1M steps ─────────────────────────
     ax = axes[1]
 
-    if prod_taus is not None:
-        potentials = list(prod_taus.keys())
-        x = np.arange(len(potentials))
-        width = 0.25
-        seeds = [42, 137, 2024]
-        seed_colors = ['#4C72B0', '#DD8452', '#55A868']
+    candidates = ['Basin A\n(a=0.8,b=3.5)', 'Basin B\n(a=0.6,b=1.0)', 'Baseline\n(a=0.7,b=3.0)']
+    means = [66.18, 69.13, 57.66]
+    stds = [10.93, 7.76, 7.11]
+    colors_bar = [COLORS['cand0'], COLORS['cand1'], COLORS['cand2']]
 
-        for i, seed in enumerate(seeds):
-            vals = [prod_taus[pot][i] for pot in potentials]
-            ax.bar(x + i * width, vals, width, label=f'Seed {seed}', color=seed_colors[i], alpha=0.8)
+    bars = ax.bar(candidates, means, color=colors_bar, alpha=0.8, edgecolor='white', linewidth=1.5)
+    ax.errorbar(candidates, means, yerr=stds, fmt='none', ecolor='black', capsize=5, capthick=1.5)
 
-        ax.set_xticks(x + width)
-        ax.set_xticklabels([p.replace('_', '\n') for p in potentials])
-        ax.set_ylabel('tau_int')
-        ax.set_title(f'(b) Production eval (METRIC={prod_metric:.2f})')
-        ax.legend(fontsize=9)
-    else:
-        ax.text(0.5, 0.5, 'Production eval\nnot yet run', ha='center', va='center',
-                transform=ax.transAxes, fontsize=14, color='gray')
-        ax.set_title('(b) Production eval (pending)')
+    # Highlight winner
+    bars[2].set_edgecolor('#2d2d2d')
+    bars[2].set_linewidth(2)
+
+    ax.axhline(57.66, color=COLORS['cand2'], lw=1, ls='--', alpha=0.5)
+    ax.set_ylabel('tau_gm (1M steps, 3-seed mean)')
+    ax.set_title('(b) Gaussmix parameter comparison')
+
+    # Annotate best
+    ax.annotate('BEST', xy=(2, 57.66), xytext=(2, 50),
+                fontsize=11, fontweight='bold', color=COLORS['cand2'],
+                ha='center', arrowprops=dict(arrowstyle='->', color=COLORS['cand2'], lw=1.5))
 
     ax.text(-0.12, 1.05, '(b)', transform=ax.transAxes, fontsize=14, fontweight='bold')
 
@@ -210,28 +204,7 @@ def make_results(data, prod_metric=None, prod_taus=None):
     print(f"Saved {FIG_DIR / 'results.png'}")
 
 
-def main():
-    data_path = BASE_DIR / 'search_results.npz'
-    if not data_path.exists():
-        print(f"ERROR: {data_path} not found. Run cmaes_search.py first.")
-        return
-
-    data = dict(np.load(data_path, allow_pickle=True))
-
-    # Check if production eval results exist
-    prod_path = BASE_DIR / 'prod_results.npz'
-    prod_metric = None
-    prod_taus = None
-    if prod_path.exists():
-        prod = dict(np.load(prod_path, allow_pickle=True))
-        prod_metric = float(prod.get('metric', [0])[0])
-        prod_taus = prod.get('tau_per_potential', None)
-        if prod_taus is not None:
-            prod_taus = prod_taus.item()  # dict from npz
-
-    make_narrative(data)
-    make_results(data, prod_metric, prod_taus)
-
-
 if __name__ == "__main__":
-    main()
+    make_narrative()
+    make_results()
+    print("Done.")
